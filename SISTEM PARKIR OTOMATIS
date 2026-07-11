@@ -1,0 +1,3 @@
+const CHANNEL_ID = "3425857";
+const READ_API_KEY = "DR1VTPHNKYM9HIFC";
+const TOTAL_SLOT = 3;
