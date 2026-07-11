@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard Parkir Otomatis</title>
+<style>
+  :root{
+    --asphalt:#14202A;
+    --asphalt-2:#1C2C39;
+    --amber:#F2A93B;
+    --green:#3FA34D;
+    --red:#D6524B;
+    --ink:#E7ECEF;
+    --muted:#8FA0AC;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{
+    background:var(--asphalt);
+    color:var(--ink);
+    font-family: 'Segoe UI', Arial, sans-serif;
+    min-height:100vh;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    padding:40px 20px 60px;
+    background-image:
+      repeating-linear-gradient(90deg, transparent 0 78px, rgba(242,169,59,0.05) 78px 82px);
+  }
+  header{
+    text-align:center;
+    margin-bottom:36px;
+  }
+  .eyebrow{
+    color:var(--amber);
+    font-size:13px;
+    letter-spacing:3px;
+    font-weight:700;
+    text-transform:uppercase;
+  }
+  h1{
+    font-size:32px;
+    margin-top:8px;
+    font-weight:800;
+  }
+  .subtitle{
+    color:var(--muted);
+    margin-top:6px;
+    font-size:14px;
+  }
+
+  .gate-wrap{
+    width:100%;
+    max-width:520px;
+    background:var(--asphalt-2);
+    border-radius:18px;
+    padding:32px;
+    text-align:center;
+    box-shadow:0 20px 50px rgba(0,0,0,0.35);
+    position:relative;
+    overflow:hidden;
+  }
+  .gate-wrap::before{
+    content:"";
+    position:absolute;
+    top:-40%; right:-20%;
+    width:260px; height:260px;
+    background:radial-gradient(circle, rgba(242,169,59,0.12), transparent 70%);
+  }
+
+  .status-badge{
+    display:inline-flex;
+    align-items:center;
+    gap:10px;
+    padding:8px 20px;
+    border-radius:999px;
+    font-weight:700;
+    font-size:14px;
+    letter-spacing:1px;
+    text-transform:uppercase;
+    transition:background 0.4s, color 0.4s;
+  }
+  .status-badge.tersedia{ background:rgba(63,163,77,0.18); color:var(--green); }
+  .status-badge.penuh{ background:rgba(214,82,75,0.18); color:var(--red); }
+  .status-dot{
+    width:9px; height:9px; border-radius:50%;
+    background:currentColor;
+    box-shadow:0 0 0 0 currentColor;
+    animation:pulse 1.6s infinite;
+  }
+  @keyframes pulse{
+    0%{ box-shadow:0 0 0 0 currentColor; opacity:1; }
+    70%{ box-shadow:0 0 0 8px transparent; opacity:0.6; }
+    100%{ box-shadow:0 0 0 0 transparent; opacity:1; }
+  }
+
+  .slot-count{
+    font-size:96px;
+    font-weight:800;
+    margin:18px 0 0;
+    line-height:1;
+    color:var(--ink);
+    letter-spacing:-2px;
+  }
+  .slot-label{
+    color:var(--muted);
+    font-size:15px;
+    margin-top:6px;
+  }
+
+  .barrier{
+    width:220px;
+    height:10px;
+    background:repeating-linear-gradient(90deg, var(--amber) 0 20px, var(--ink) 20px 40px);
+    border-radius:6px;
+    margin:28px auto 0;
+    transform-origin:left center;
+    transition:transform 0.6s ease;
+  }
+  .barrier.open{ transform:rotate(-38deg) translateY(-4px); }
+
+  .meta{
+    display:flex;
+    justify-content:space-between;
+    margin-top:32px;
+    padding-top:20px;
+    border-top:1px solid rgba(255,255,255,0.08);
+    font-size:12.5px;
+    color:var(--muted);
+  }
+
+  .error-box{
+    margin-top:20px;
+    padding:14px 18px;
+    background:rgba(214,82,75,0.12);
+    border:1px solid rgba(214,82,75,0.35);
+    border-radius:10px;
+    color:var(--red);
+    font-size:13px;
+    display:none;
+  }
+
+  footer{
+    margin-top:28px;
+    color:var(--muted);
+    font-size:12px;
+    text-align:center;
+  }
+</style>
+</head>
+<body>
+
+  <header>
+    <div class="eyebrow">Sistem Parkir Otomatis</div>
+    <h1>Dashboard Ketersediaan Slot</h1>
+    <div class="subtitle">Data langsung dari sensor ultrasonik &amp; ESP32, via ThingSpeak</div>
+  </header>
+
+  <div class="gate-wrap">
+    <span id="statusBadge" class="status-badge tersedia">
+      <span class="status-dot"></span>
+      <span id="statusText">Memuat...</span>
+    </span>
+
+    <div class="slot-count" id="slotCount">–</div>
+    <div class="slot-label">slot kosong dari <span id="totalSlot">3</span> total slot</div>
+
+    <div class="barrier" id="barrier"></div>
+
+    <div class="meta">
+      <span>Update terakhir: <span id="lastUpdate">–</span></span>
+      <span>Refresh otomatis 15 detik</span>
+    </div>
+
+    <div class="error-box" id="errorBox">
+      Gagal mengambil data. Periksa Channel ID / Read API Key di bagian pengaturan kode.
+    </div>
+  </div>
+
+  <footer>
+    Dibuat untuk Tugas Besar Mikrokontroler &amp; Mikroprosesor
+  </footer>
+
+<script>
+  // ====== PENGATURAN — GANTI SESUAI CHANNEL THINGSPEAK KAMU ======
+  const CHANNEL_ID = "3425857";       // contoh: 2831942
+  const READ_API_KEY = "39TLQ6BBYB1BZBNY";   // ambil dari tab API Keys di ThingSpeak
+  const TOTAL_SLOT = 3;                               // sesuaikan jumlah total slot parkir
+  // =================================================================
+
+  const slotCountEl = document.getElementById("slotCount");
+  const statusBadge = document.getElementById("statusBadge");
+  const statusText = document.getElementById("statusText");
+  const barrier = document.getElementById("barrier");
+  const lastUpdate = document.getElementById("lastUpdate");
+  const errorBox = document.getElementById("errorBox");
+  const totalSlotEl = document.getElementById("totalSlot");
+
+  totalSlotEl.textContent = TOTAL_SLOT;
+
+  async function ambilData() {
+    try {
+      const url = `https://api.thingspeak.com/channels/${CHANNEL_ID}/feeds.json?api_key=${READ_API_KEY}&results=1`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error("Response tidak OK");
+      const data = await res.json();
+      const feed = data.feeds[0];
+
+      const slotKosong = parseInt(feed.field1, 10);
+      const status = parseInt(feed.field2, 10);
+
+      slotCountEl.textContent = isNaN(slotKosong) ? "–" : slotKosong;
+
+      if (status === 1) {
+        statusBadge.classList.remove("penuh");
+        statusBadge.classList.add("tersedia");
+        statusText.textContent = "Tersedia";
+        barrier.classList.remove("open");
+      } else {
+        statusBadge.classList.remove("tersedia");
+        statusBadge.classList.add("penuh");
+        statusText.textContent = "Penuh";
+        barrier.classList.add("open");
+      }
+
+      const waktu = new Date(feed.created_at);
+      lastUpdate.textContent = waktu.toLocaleTimeString("id-ID");
+      errorBox.style.display = "none";
+
+    } catch (err) {
+      errorBox.style.display = "block";
+      console.error("Gagal mengambil data ThingSpeak:", err);
+    }
+  }
+
+  ambilData();
+  setInterval(ambilData, 15000); // refresh tiap 15 detik, sama seperti interval kirim data ESP32
+</script>
+
+</body>
+</html>
